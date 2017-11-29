@@ -27,17 +27,16 @@ namespace Samples.AspNetCore.Controllers
             miniProfilerOptions = options.Value;
         }
 
+        [HttpGet]
         public IActionResult Ping()
         {
             return Ok("pong");
         }
 
         [HttpGet]
-        public async Task<IActionResult> PopulateDatabase([FromQuery] int count)
+        public async Task<IActionResult> PopulateDatabaseAsync([FromQuery] int count)
         {
             if (!ModelState.IsValid) return BadRequest();
-
-            LastUpdate = MiniProfiler.Current.Id;
 
             SampleContext context = null;
             int existingCount = 0;
@@ -76,7 +75,7 @@ namespace Samples.AspNetCore.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> CleanDatabase()
+        public async Task<IActionResult> CleanDatabaseAsync()
         {
             if(!ModelState.IsValid) return BadRequest();
 
@@ -103,6 +102,8 @@ namespace Samples.AspNetCore.Controllers
         {
             if (!ModelState.IsValid) return BadRequest();
 
+            LastUpdate = MiniProfiler.Current.Id;
+
             SampleContext context = null;
             using (MiniProfiler.Current.Step("EF Core Stuff"))
             {
@@ -114,15 +115,14 @@ namespace Samples.AspNetCore.Controllers
 
                 using (MiniProfiler.Current.Step("Get items"))
                 {
-                    return Ok(await context.RouteHits.ToListAsync().ConfigureAwait(false));
+                    return Ok(await context.RouteHits.Select(x => x.Id).ToListAsync().ConfigureAwait(false));
                 }
             }
         }
 
         [HttpGet]
-        public IActionResult UpdateItem(Guid id)
+        public async Task<IActionResult> UpdateItemAsync(Guid id)
         {
-            DateTime myTime = default(DateTime);
             RouteHit hit;
             SampleContext context = null;
             using (MiniProfiler.Current.Step("EF Core Stuff"))
@@ -144,9 +144,8 @@ namespace Samples.AspNetCore.Controllers
                         using (MiniProfiler.Current.Step("Update"))
                         {
                             hit.UpdateTime = DateTime.UtcNow;
-                            context.SaveChanges();
+                            await context.SaveChangesAsync().ConfigureAwait(false);
                         }
-                        myTime = hit.UpdateTime.Value;
                     }
                 }
                 finally
@@ -155,7 +154,7 @@ namespace Samples.AspNetCore.Controllers
                 }
             }
 
-            return Content("EF complete - count: " + myTime);
+            return Ok(id);
         }
 
         [HttpGet]
@@ -165,11 +164,31 @@ namespace Samples.AspNetCore.Controllers
             guids = guids.TakeWhile(g => g != LastUpdate);
 
             var items = guids.Reverse().Select(g => miniProfilerOptions.Storage.Load(g)).Where(p => p != null);
-            var output = "" + Environment.NewLine;
+            var output = "Id,Started,TotalMs,"
+                + "ContextStart,ContextMs,"
+                + "GetStart,GetMs,"
+                + "GetOpenStart,GetOpenMs,GetFKStart,GetFKMs,GetSelectStart,GetSelectMs,GetCloseStart,GetCloseMs,"
+                + "UpdateStart,UpdateMs,"
+                + "UpdateOpenStart,UpdateOpenMs,UpdateFKStart,UpdateFKMs,UpdateSelectStart,UpdateSelectMs,UpdateCloseStart,UpdateCloseMs"
+                + Environment.NewLine;
 
             foreach (var item in items)
             {
-                output += "" + Environment.NewLine;
+                var createContext = item.Root.Children[1].Children[0].Children[0];
+
+                var get = item.Root.Children[1].Children[0].Children[1];
+                var getSql = get.CustomTimings["sql"];
+
+                var update = item.Root.Children[1].Children[0].Children[2];
+                var updateSql = update.CustomTimings["sql"];
+
+                output += $"{item.Id},{item.Started.ToString("yyyy-MM-ddThh:mm:ss.ffffff")},{item.DurationMilliseconds},"
+                    + $"{createContext.StartMilliseconds},{createContext.DurationMilliseconds}," // Create context
+                    + $"{get.StartMilliseconds},{get.DurationMilliseconds}," // Get items
+                    + $"{getSql[0].StartMilliseconds},{getSql[0].DurationMilliseconds},{getSql[1].StartMilliseconds},{getSql[1].DurationMilliseconds},{getSql[2].StartMilliseconds},{getSql[2].DurationMilliseconds},{getSql[3].StartMilliseconds},{getSql[3].DurationMilliseconds}," // Get SQL
+                    + $"{update.StartMilliseconds},{update.DurationMilliseconds}," // Update items
+                    + $"{updateSql[0].StartMilliseconds},{updateSql[0].DurationMilliseconds},{updateSql[1].StartMilliseconds},{updateSql[1].DurationMilliseconds},{updateSql[2].StartMilliseconds},{updateSql[2].DurationMilliseconds},{updateSql[3].StartMilliseconds},{updateSql[3].DurationMilliseconds}," // Update SQL
+                    + Environment.NewLine;
             }
 
             return Ok(output);
