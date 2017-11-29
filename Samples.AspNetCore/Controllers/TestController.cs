@@ -1,6 +1,8 @@
 ﻿using Dapper;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Samples.AspNetCore.Models;
 using StackExchange.Profiling;
 using StackExchange.Profiling.Data;
@@ -15,9 +17,211 @@ namespace Samples.AspNetCore.Controllers
     public class TestController : Controller
     {
         private readonly IServiceProvider _serviceProvider;
-        public TestController(IServiceProvider serviceProvider)
+        private readonly MiniProfilerOptions miniProfilerOptions;
+
+        private static Guid LastUpdate;
+
+        public TestController(IServiceProvider serviceProvider, IOptions<MiniProfilerOptions> options)
         {
             _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+            miniProfilerOptions = options.Value;
+        }
+
+        public IActionResult Ping()
+        {
+            return Ok("pong");
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> PopulateDatabase([FromQuery] int count)
+        {
+            if (!ModelState.IsValid) return BadRequest();
+
+            LastUpdate = MiniProfiler.Current.Id;
+
+            SampleContext context = null;
+            int existingCount = 0;
+            using (MiniProfiler.Current.Step("EF Core Stuff"))
+            {
+                using (MiniProfiler.Current.Step("Create Context"))
+                {
+                    context = (SampleContext)_serviceProvider.GetService(typeof(SampleContext));
+                }
+
+                using (MiniProfiler.Current.Step("Get Existing"))
+                {
+                    existingCount = context.RouteHits.Count();
+                }
+
+                if (existingCount < count)
+                {
+                    using (MiniProfiler.Current.Step("Insert"))
+                    {
+                        for (int i = existingCount; i < count; i++)
+                        {
+                            context.Add(new RouteHit()
+                            {
+                                Id = Guid.NewGuid(),
+                                Name = "name" + i.ToString(),
+                                UpdateTime = DateTime.UtcNow
+                            });
+                        }
+
+                        await context.SaveChangesAsync().ConfigureAwait(false);
+                    }
+                }
+
+                return Ok(count);
+            }
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> CleanDatabase()
+        {
+            if(!ModelState.IsValid) return BadRequest();
+
+            SampleContext context = null;
+            using (MiniProfiler.Current.Step("EF Core Stuff"))
+            {
+                using (MiniProfiler.Current.Step("Create Context"))
+                {
+                    context = (SampleContext)_serviceProvider.GetService(typeof(SampleContext));
+                }
+
+                using (MiniProfiler.Current.Step("Delete Existing"))
+                {
+                    context.RemoveRange(await context.RouteHits.ToListAsync().ConfigureAwait(false));
+                    await context.SaveChangesAsync().ConfigureAwait(false);
+                }
+
+                return Ok();
+            }
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetHitListAsync()
+        {
+            if (!ModelState.IsValid) return BadRequest();
+
+            SampleContext context = null;
+            using (MiniProfiler.Current.Step("EF Core Stuff"))
+            {
+                using (MiniProfiler.Current.Step("Create Context"))
+                {
+                    context = (SampleContext)_serviceProvider.GetService(typeof(SampleContext));
+                    context.Database.EnsureCreated();
+                }
+
+                using (MiniProfiler.Current.Step("Get items"))
+                {
+                    return Ok(await context.RouteHits.ToListAsync().ConfigureAwait(false));
+                }
+            }
+        }
+
+        [HttpGet]
+        public IActionResult UpdateItem(Guid id)
+        {
+            DateTime myTime = default(DateTime);
+            RouteHit hit;
+            SampleContext context = null;
+            using (MiniProfiler.Current.Step("EF Core Stuff"))
+            {
+                try
+                {
+                    using (MiniProfiler.Current.Step("Create Context"))
+                    {
+                        context = (SampleContext)_serviceProvider.GetService(typeof(SampleContext));
+                    }
+
+                    using (MiniProfiler.Current.Step("Get Existing"))
+                    {
+                        hit = context.RouteHits.FirstOrDefault(h => h.Id == id);
+                    }
+
+                    if (hit != null)
+                    {
+                        using (MiniProfiler.Current.Step("Update"))
+                        {
+                            hit.UpdateTime = DateTime.UtcNow;
+                            context.SaveChanges();
+                        }
+                        myTime = hit.UpdateTime.Value;
+                    }
+                }
+                finally
+                {
+                    context?.Dispose();
+                }
+            }
+
+            return Content("EF complete - count: " + myTime);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetProfilingDataSinceLastPopulateAsync()
+        {
+            var guids = await miniProfilerOptions.Storage.ListAsync(10000).ConfigureAwait(false);
+            guids = guids.TakeWhile(g => g != LastUpdate);
+
+            var items = guids.Reverse().Select(g => miniProfilerOptions.Storage.Load(g)).Where(p => p != null);
+            var output = "" + Environment.NewLine;
+
+            foreach (var item in items)
+            {
+                output += "" + Environment.NewLine;
+            }
+
+            return Ok(output);
+        }
+
+        #region not used
+
+        public IActionResult EntityFrameworkCore()
+        {
+            DateTime now;
+            RouteHit hit;
+            SampleContext context = null;
+            using (MiniProfiler.Current.Step("EF Core Stuff"))
+            {
+                const string name = "Test/EntityFrameworkCore";
+                try
+                {
+                    using (MiniProfiler.Current.Step("Create Context"))
+                    {
+                        context = (SampleContext)_serviceProvider.GetService(typeof(SampleContext));
+                    }
+
+                    using (MiniProfiler.Current.Step("Get Existing"))
+                    {
+                        hit = context.RouteHits.FirstOrDefault(h => h.Name == name);
+                    }
+
+                    if (hit == null)
+                    {
+                        using (MiniProfiler.Current.Step("Insertion"))
+                        {
+                            context.RouteHits.Add(hit = new RouteHit { Name = name, UpdateTime = DateTime.UtcNow });
+                            context.SaveChanges();
+                        }
+                    }
+                    else
+                    {
+                        using (MiniProfiler.Current.Step("Update"))
+                        {
+                            hit.UpdateTime = DateTime.UtcNow;
+                            context.SaveChanges();
+                        }
+                    }
+                    now = hit.UpdateTime.Value;
+                }
+                finally
+                {
+                    context?.Dispose();
+                }
+            }
+
+            return Content("EF complete - now: " + now);
         }
 
         public ActionResult EnableProfilingUI()
@@ -83,53 +287,6 @@ namespace Samples.AspNetCore.Controllers
                 MassiveNesting();
             }
             return Content("Massive Nesting 2 completed");
-        }
-
-        public IActionResult EntityFrameworkCore()
-        {
-            DateTime myTime;
-            RouteHit hit;
-            SampleContext context = null;
-            using (MiniProfiler.Current.Step("EF Core Stuff"))
-            {
-                const string name = "Test/EntityFrameworkCore";
-                try
-                {
-                    using (MiniProfiler.Current.Step("Create Context"))
-                    {
-                        context = (SampleContext)_serviceProvider.GetService(typeof(SampleContext));
-                    }
-
-                    using (MiniProfiler.Current.Step("Get Existing"))
-                    {
-                        hit = context.RouteHits.FirstOrDefault(h => h.Name == name);
-                    }
-
-                    if (hit == null)
-                    {
-                        using (MiniProfiler.Current.Step("Insertion"))
-                        {
-                            context.RouteHits.Add(hit = new RouteHit { Name = name, UpdateTime = DateTime.UtcNow });
-                            context.SaveChanges();
-                        }
-                    }
-                    else
-                    {
-                        using (MiniProfiler.Current.Step("Update"))
-                        {
-                            hit.UpdateTime = DateTime.UtcNow;
-                            context.SaveChanges();
-                        }
-                    }
-                    myTime = hit.UpdateTime.Value;
-                }
-                finally
-                {
-                    context?.Dispose();
-                }
-            }
-
-            return Content("EF complete - count: " + myTime);
         }
 
         private void RecursiveMethod(ref int depth, DbConnection connection, MiniProfiler profiler)
@@ -327,5 +484,6 @@ Order By RouteName");
                 return cnn;
             }
         }
+        #endregion
     }
 }
