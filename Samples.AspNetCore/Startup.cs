@@ -122,7 +122,6 @@ namespace Samples.AspNetCore
             // For nesting test routes
             new SqliteStorage(SqliteConnectionString).WithSchemaCreation();
 
-            context.Database.EnsureDeleted();
             context.Database.EnsureCreated();
         }
     }
