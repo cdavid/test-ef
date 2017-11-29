@@ -54,7 +54,7 @@ namespace ConsoleApp1
             Log($"Get Result OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
             lastTime = _stopwatch.ElapsedMilliseconds;
 
-            Console.ReadKey();
+            //Console.ReadKey();
         }
 
         private static void Log(string format, params object[] args)
@@ -107,11 +107,11 @@ namespace ConsoleApp1
                 if (response.IsSuccessStatusCode)
                 {
                     var list = JsonConvert.DeserializeObject<List<Guid>>(output);
-                    if (list.Count != itemCount)
+                    if (list.Count < itemCount)
                     {
-                        throw new InvalidOperationException("Wrong number of items on the server side");
+                        throw new InvalidOperationException($"Wrong number of items on the server side: {list.Count}");
                     }
-                    return list;
+                    return list.GetRange(0, itemCount);
                 }
                 throw new InvalidOperationException("Response from server was invalid");
             }
@@ -125,16 +125,16 @@ namespace ConsoleApp1
                 using (var request = new HttpRequestMessage(HttpMethod.Get, string.Format(updateUrl, item)))
                 {
                     var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
+                    var output = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
                     if (response.IsSuccessStatusCode)
                     {
-                        var output = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
                         if (!item.Equals(Guid.Parse(output.Replace("\"", ""))))
                         {
                             throw new InvalidOperationException($"Invalid response in request {item}");
                         }
                         return;
                     }
-                    throw new InvalidOperationException($"Exception in task {item}");
+                    throw new InvalidOperationException($"Exception in task {item}: {output}");
                 }
             });
 
