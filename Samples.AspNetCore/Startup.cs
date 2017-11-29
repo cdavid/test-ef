@@ -1,11 +1,13 @@
 ﻿using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Samples.AspNetCore.Models;
 using StackExchange.Profiling.Storage;
+using System;
 
 namespace Samples.AspNetCore
 {
@@ -31,8 +33,23 @@ namespace Samples.AspNetCore
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
+            // Use SQL Database if in Azure, otherwise, use SQLLite
+            if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Production")
+            {
+                string connString = Configuration.GetConnectionString("MyDbConnection");
+                services.AddDbContext<SampleContext>(options => options.UseSqlServer(connString));
+                //services.AddDbContextPool<SampleContext>(options => options.UseSqlServer(connString));
+            }
+            else
+            {
+                const string connString = "Data Source=MvcMovie.db";
+                services.AddDbContext<SampleContext>(options => options.UseSqlite(connString));
+                //services.AddDbContextPool<SampleContext>(options => options.UseSqlite(connString));
+            }
+            // Automatically perform database migration
+            services.BuildServiceProvider().GetService<SampleContext>().Database.Migrate();
+
             // Add framework services.
-            services.AddDbContext<SampleContext>();
             services.AddMvc();
 
             // Add MiniProfiler services
@@ -70,7 +87,7 @@ namespace Samples.AspNetCore
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-        public void Configure(IApplicationBuilder app, IHostingEnvironment env, ILoggerFactory loggerFactory)
+        public void Configure(IApplicationBuilder app, IHostingEnvironment env, ILoggerFactory loggerFactory, SampleContext context)
         {
             loggerFactory.AddConsole(Configuration.GetSection("Logging"));
             loggerFactory.AddDebug();
@@ -104,6 +121,9 @@ namespace Samples.AspNetCore
             }
             // For nesting test routes
             new SqliteStorage(SqliteConnectionString).WithSchemaCreation();
+
+            context.Database.EnsureDeleted();
+            context.Database.EnsureCreated();
         }
     }
 }

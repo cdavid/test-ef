@@ -254,3 +254,4 @@ src/RDWeb/src/RDWeb/wwwroot/RdClient
 src/RDWeb/src/RDWeb/wwwroot/webclient
 **/*.pubxml
 **/launchsettings.json
+**.db

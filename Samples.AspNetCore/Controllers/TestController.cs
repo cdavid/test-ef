@@ -14,6 +14,12 @@ namespace Samples.AspNetCore.Controllers
 {
     public class TestController : Controller
     {
+        private readonly IServiceProvider _serviceProvider;
+        public TestController(IServiceProvider serviceProvider)
+        {
+            _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+        }
+
         public ActionResult EnableProfilingUI()
         {
             Program.DisableProfilingResults = false;
@@ -81,7 +87,7 @@ namespace Samples.AspNetCore.Controllers
 
         public IActionResult EntityFrameworkCore()
         {
-            int count;
+            DateTime myTime;
             RouteHit hit;
             SampleContext context = null;
             using (MiniProfiler.Current.Step("EF Core Stuff"))
@@ -91,19 +97,19 @@ namespace Samples.AspNetCore.Controllers
                 {
                     using (MiniProfiler.Current.Step("Create Context"))
                     {
-                        context = new SampleContext();
+                        context = (SampleContext)_serviceProvider.GetService(typeof(SampleContext));
                     }
 
                     using (MiniProfiler.Current.Step("Get Existing"))
                     {
-                        hit = context.RouteHits.FirstOrDefault(h => h.RouteName == name);
+                        hit = context.RouteHits.FirstOrDefault(h => h.Name == name);
                     }
 
                     if (hit == null)
                     {
                         using (MiniProfiler.Current.Step("Insertion"))
                         {
-                            context.RouteHits.Add(hit = new RouteHit { RouteName = name, HitCount = 1 });
+                            context.RouteHits.Add(hit = new RouteHit { Name = name, UpdateTime = DateTime.UtcNow });
                             context.SaveChanges();
                         }
                     }
@@ -111,11 +117,11 @@ namespace Samples.AspNetCore.Controllers
                     {
                         using (MiniProfiler.Current.Step("Update"))
                         {
-                            hit.HitCount++;
+                            hit.UpdateTime = DateTime.UtcNow;
                             context.SaveChanges();
                         }
                     }
-                    count = hit.HitCount;
+                    myTime = hit.UpdateTime.Value;
                 }
                 finally
                 {
@@ -123,7 +129,7 @@ namespace Samples.AspNetCore.Controllers
                 }
             }
 
-            return Content("EF complete - count: " + count);
+            return Content("EF complete - count: " + myTime);
         }
 
         private void RecursiveMethod(ref int depth, DbConnection connection, MiniProfiler profiler)
