@@ -42,17 +42,17 @@ namespace ConsoleApp1
             Log($"Ping OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
             lastTime = _stopwatch.ElapsedMilliseconds;
 
-            var items = await GetItemsAsync(_itemCount, getUrl).ConfigureAwait(false);
-            Log($"Fetch OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
-            lastTime = _stopwatch.ElapsedMilliseconds;
+            //var items = await GetItemsAsync(_itemCount, getUrl).ConfigureAwait(false);
+            //Log($"Fetch OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
+            //lastTime = _stopwatch.ElapsedMilliseconds;
 
-            await UpdateItemsAsync(items, updateUrl).ConfigureAwait(false);
-            Log($"Update OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
-            lastTime = _stopwatch.ElapsedMilliseconds;
+            //await UpdateItemsAsync(items, updateUrl).ConfigureAwait(false);
+            //Log($"Update OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
+            //lastTime = _stopwatch.ElapsedMilliseconds;
 
-            await GetResultAsync(profileUrl).ConfigureAwait(false);
-            Log($"Get Result OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
-            lastTime = _stopwatch.ElapsedMilliseconds;
+            //await GetResultAsync(profileUrl).ConfigureAwait(false);
+            //Log($"Get Result OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
+            //lastTime = _stopwatch.ElapsedMilliseconds;
 
             var items2 = await GetItemsAsync(_itemCount, getUrl2).ConfigureAwait(false);
             Log($"Fetch OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
