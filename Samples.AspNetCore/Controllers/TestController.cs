@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Samples.AspNetCore.Models;
 using StackExchange.Profiling;
@@ -17,14 +18,16 @@ namespace Samples.AspNetCore.Controllers
     public class TestController : Controller
     {
         private readonly IServiceProvider _serviceProvider;
-        private readonly MiniProfilerOptions miniProfilerOptions;
+        private readonly MiniProfilerOptions _miniProfilerOptions;
+        private readonly ILogger _logger;
 
         private static Guid LastUpdate;
 
-        public TestController(IServiceProvider serviceProvider, IOptions<MiniProfilerOptions> options)
+        public TestController(IServiceProvider serviceProvider, IOptions<MiniProfilerOptions> options, ILoggerFactory loggerFactory)
         {
             _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
-            miniProfilerOptions = options.Value;
+            _miniProfilerOptions = options.Value;
+            _logger = loggerFactory.CreateLogger<TestController>();
         }
 
         [HttpGet]
@@ -160,16 +163,16 @@ namespace Samples.AspNetCore.Controllers
         [HttpGet]
         public async Task<IActionResult> GetProfilingDataSinceLastPopulateAsync()
         {
-            var guids = await miniProfilerOptions.Storage.ListAsync(10000).ConfigureAwait(false);
+            var guids = await _miniProfilerOptions.Storage.ListAsync(10000).ConfigureAwait(false);
             guids = guids.TakeWhile(g => g != LastUpdate);
 
-            var items = guids.Reverse().Select(g => miniProfilerOptions.Storage.Load(g)).Where(p => p != null);
+            var items = guids.Reverse().Select(g => _miniProfilerOptions.Storage.Load(g)).Where(p => p != null);
             var output = "Id,Started,TotalMs,"
                 + "ContextStart,ContextMs,"
                 + "GetStart,GetMs,"
-                + "GetOpenStart,GetOpenMs,GetFKStart,GetFKMs,GetSelectStart,GetSelectMs,GetCloseStart,GetCloseMs,"
+                + "GetOpenStart,GetOpenMs,GetSelectStart,GetSelectMs,GetCloseStart,GetCloseMs,"
                 + "UpdateStart,UpdateMs,"
-                + "UpdateOpenStart,UpdateOpenMs,UpdateFKStart,UpdateFKMs,UpdateSelectStart,UpdateSelectMs,UpdateCloseStart,UpdateCloseMs"
+                + "UpdateOpenStart,UpdateOpenMs,UpdateSelectStart,UpdateSelectMs,UpdateCloseStart,UpdateCloseMs"
                 + Environment.NewLine;
 
             foreach (var item in items)
@@ -185,9 +188,9 @@ namespace Samples.AspNetCore.Controllers
                 output += $"{item.Id},{item.Started.ToString("yyyy-MM-ddThh:mm:ss.ffffff")},{item.DurationMilliseconds},"
                     + $"{createContext.StartMilliseconds},{createContext.DurationMilliseconds}," // Create context
                     + $"{get.StartMilliseconds},{get.DurationMilliseconds}," // Get items
-                    + $"{getSql[0].StartMilliseconds},{getSql[0].DurationMilliseconds},{getSql[1].StartMilliseconds},{getSql[1].DurationMilliseconds},{getSql[2].StartMilliseconds},{getSql[2].DurationMilliseconds},{getSql[3].StartMilliseconds},{getSql[3].DurationMilliseconds}," // Get SQL
+                    + $"{getSql[0].StartMilliseconds},{getSql[0].DurationMilliseconds},{getSql[1].StartMilliseconds},{getSql[1].DurationMilliseconds},{getSql[2].StartMilliseconds},{getSql[2].DurationMilliseconds}," // Get SQL
                     + $"{update.StartMilliseconds},{update.DurationMilliseconds}," // Update items
-                    + $"{updateSql[0].StartMilliseconds},{updateSql[0].DurationMilliseconds},{updateSql[1].StartMilliseconds},{updateSql[1].DurationMilliseconds},{updateSql[2].StartMilliseconds},{updateSql[2].DurationMilliseconds},{updateSql[3].StartMilliseconds},{updateSql[3].DurationMilliseconds}," // Update SQL
+                    + $"{updateSql[0].StartMilliseconds},{updateSql[0].DurationMilliseconds},{updateSql[1].StartMilliseconds},{updateSql[1].DurationMilliseconds},{updateSql[2].StartMilliseconds},{updateSql[2].DurationMilliseconds}" // Update SQL
                     + Environment.NewLine;
             }
 

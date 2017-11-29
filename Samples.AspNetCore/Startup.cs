@@ -123,6 +123,7 @@ namespace Samples.AspNetCore
             new SqliteStorage(SqliteConnectionString).WithSchemaCreation();
 
             context.Database.EnsureCreated();
+            context.SaveChanges();
         }
     }
 }
