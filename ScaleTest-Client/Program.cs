@@ -12,17 +12,17 @@ namespace ConsoleApp1
 {
     internal static class Program
     {
-        private static HttpClient _httpClient = new HttpClient();
+        private static readonly HttpClient _httpClient = new HttpClient();
         private static string _brokerBaseUrl = "http://localhost:54580";
         private static int _itemCount = 10;
-        private static Stopwatch _stopwatch = new Stopwatch();
+        private static readonly Stopwatch _stopwatch = new Stopwatch();
 
         public static async Task Main(string[] args)
         {
             if (args.Length > 0 && !string.IsNullOrEmpty(args[0]))
             {
                 _brokerBaseUrl = args[0];
-            } 
+            }
 
             if (args.Length > 1 && !string.IsNullOrEmpty(args[1]))
             {
@@ -38,19 +38,31 @@ namespace ConsoleApp1
             Log("Begin test run with arguments: Url={0} , Count={1}", _brokerBaseUrl, _itemCount);
             _stopwatch.Start();
 
-            await DoPing().ConfigureAwait(false);
+            await DoPingAsync().ConfigureAwait(false);
             Log($"Ping OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
             lastTime = _stopwatch.ElapsedMilliseconds;
 
-            var items = await GetItems(_itemCount).ConfigureAwait(false);
+            var items = await GetItemsAsync(_itemCount, getUrl).ConfigureAwait(false);
             Log($"Fetch OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
             lastTime = _stopwatch.ElapsedMilliseconds;
 
-            await UpdateItems(items);
+            await UpdateItemsAsync(items, updateUrl).ConfigureAwait(false);
             Log($"Update OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
             lastTime = _stopwatch.ElapsedMilliseconds;
 
-            await GetResult();
+            await GetResultAsync(profileUrl).ConfigureAwait(false);
+            Log($"Get Result OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
+            lastTime = _stopwatch.ElapsedMilliseconds;
+
+            var items2 = await GetItemsAsync(_itemCount, getUrl2).ConfigureAwait(false);
+            Log($"Fetch OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
+            lastTime = _stopwatch.ElapsedMilliseconds;
+
+            await UpdateItemsAsync(items2, updateUrl2).ConfigureAwait(false);
+            Log($"Update OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
+            lastTime = _stopwatch.ElapsedMilliseconds;
+
+            await GetResultAsync(profileUrl2).ConfigureAwait(false);
             Log($"Get Result OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
             lastTime = _stopwatch.ElapsedMilliseconds;
 
@@ -62,15 +74,19 @@ namespace ConsoleApp1
             Console.WriteLine(format, args);
         }
 
-        const string pingUrl = "/test/Ping";
-        const string populateUrl = "/test/PopulateDatabaseAsync?count={0}";
-        const string getUrl = "/test/GetHitListAsync";
-        const string updateUrl = "/test/UpdateItemAsync/{0}";
-        const string cleanUrl = "/test/CleanDatabaseAsync";
-        const string profileUrl = "/test/GetProfilingDataSinceLastPopulateAsync";
+        private const string pingUrl = "/test/Ping";
+        private const string populateUrl = "/test/PopulateDatabaseAsync?count={0}";
+        private const string getUrl = "/test/GetHitListAsync";
+        private const string updateUrl = "/test/UpdateItemAsync/{0}";
+        private const string cleanUrl = "/test/CleanDatabaseAsync";
+        private const string profileUrl = "/test/GetProfilingDataSinceLastPopulateAsync";
+
+        private const string getUrl2 = "/test2/GetHitListAsync";
+        private const string updateUrl2 = "/test2/UpdateItemAsync/{0}";
+        private const string profileUrl2 = "/test2/GetProfilingDataSinceLastPopulateAsync";
 
         // 1. ping to make sure everything is fine
-        private static async Task DoPing()
+        private static async Task DoPingAsync()
         {
             using (var request = new HttpRequestMessage(HttpMethod.Get, pingUrl))
             {
@@ -88,7 +104,7 @@ namespace ConsoleApp1
         }
 
         // 2. populate database with N Hits and get the list of ids
-        private static async Task<List<Guid>> GetItems(int itemCount)
+        private static async Task<List<Guid>> GetItemsAsync(int itemCount, string getHitListUrl)
         {
             using (var request = new HttpRequestMessage(HttpMethod.Get, string.Format(populateUrl, itemCount)))
             {
@@ -100,7 +116,7 @@ namespace ConsoleApp1
                 }
             }
 
-            using (var request = new HttpRequestMessage(HttpMethod.Get, getUrl))
+            using (var request = new HttpRequestMessage(HttpMethod.Get, getHitListUrl))
             {
                 var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
                 var output = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
@@ -118,11 +134,11 @@ namespace ConsoleApp1
         }
 
         // 3. Make N requests
-        private static async Task UpdateItems(List<Guid> items)
+        private static async Task UpdateItemsAsync(List<Guid> items, string url)
         {
             var tasks = items.Select(async item =>
             {
-                using (var request = new HttpRequestMessage(HttpMethod.Get, string.Format(updateUrl, item)))
+                using (var request = new HttpRequestMessage(HttpMethod.Get, string.Format(url, item)))
                 {
                     var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
                     var output = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
@@ -148,9 +164,9 @@ namespace ConsoleApp1
         }
 
         // 5. Download results
-        private static async Task GetResult()
+        private static async Task GetResultAsync(string getResultUrl)
         {
-            using (var request = new HttpRequestMessage(HttpMethod.Get, profileUrl))
+            using (var request = new HttpRequestMessage(HttpMethod.Get, getResultUrl))
             {
                 var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
                 if (response.IsSuccessStatusCode)
