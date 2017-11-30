@@ -42,27 +42,35 @@ namespace ConsoleApp1
             Log($"Ping OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
             lastTime = _stopwatch.ElapsedMilliseconds;
 
+            // Initial run - DbContext requested manually from DI
             //var items = await GetItemsAsync(_itemCount, getUrl).ConfigureAwait(false);
             //Log($"Fetch OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
             //lastTime = _stopwatch.ElapsedMilliseconds;
-
             //await UpdateItemsAsync(items, updateUrl).ConfigureAwait(false);
             //Log($"Update OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
             //lastTime = _stopwatch.ElapsedMilliseconds;
-
             //await GetResultAsync(profileUrl).ConfigureAwait(false);
             //Log($"Get Result OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
             //lastTime = _stopwatch.ElapsedMilliseconds;
 
-            var items2 = await GetItemsAsync(_itemCount, getUrl2).ConfigureAwait(false);
+            // Attempt 2 - DbContext directly from DI
+            //var items2 = await GetItemsAsync(_itemCount, getUrl2).ConfigureAwait(false);
+            //Log($"Fetch OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
+            //lastTime = _stopwatch.ElapsedMilliseconds;
+            //await UpdateItemsAsync(items2, updateUrl2).ConfigureAwait(false);
+            //Log($"Update OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
+            //lastTime = _stopwatch.ElapsedMilliseconds;
+            //await GetResultAsync(profileUrl2).ConfigureAwait(false);
+            //Log($"Get Result OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
+            //lastTime = _stopwatch.ElapsedMilliseconds;
+
+            var items3 = await GetItemsAsync(_itemCount, getUrl3).ConfigureAwait(false);
             Log($"Fetch OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
             lastTime = _stopwatch.ElapsedMilliseconds;
-
-            await UpdateItemsAsync(items2, updateUrl2).ConfigureAwait(false);
+            await UpdateItemsAsync(items3, updateUrl3).ConfigureAwait(false);
             Log($"Update OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
             lastTime = _stopwatch.ElapsedMilliseconds;
-
-            await GetResultAsync(profileUrl2).ConfigureAwait(false);
+            await GetResultAsync(profileUrl3).ConfigureAwait(false);
             Log($"Get Result OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
             lastTime = _stopwatch.ElapsedMilliseconds;
 
@@ -84,6 +92,10 @@ namespace ConsoleApp1
         private const string getUrl2 = "/test2/GetHitListAsync";
         private const string updateUrl2 = "/test2/UpdateItemAsync/{0}";
         private const string profileUrl2 = "/test2/GetProfilingDataSinceLastPopulateAsync";
+
+        private const string getUrl3 = "/test3/GetHitListAsync";
+        private const string updateUrl3 = "/test3/UpdateItemAsync/{0}";
+        private const string profileUrl3 = "/test3/GetProfilingDataSinceLastPopulateAsync";
 
         // 1. ping to make sure everything is fine
         private static async Task DoPingAsync()
@@ -169,12 +181,16 @@ namespace ConsoleApp1
             using (var request = new HttpRequestMessage(HttpMethod.Get, getResultUrl))
             {
                 var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
+                var output = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
                 if (response.IsSuccessStatusCode)
                 {
-                    var output = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
                     var filePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".csv");
                     Log($"Writing results to {filePath}");
                     await File.WriteAllTextAsync(filePath, output).ConfigureAwait(false);
+                }
+                else
+                {
+                    Log($"Bad result: {output}");
                 }
             }
         }
