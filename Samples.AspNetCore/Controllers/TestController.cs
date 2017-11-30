@@ -52,7 +52,7 @@ namespace Samples.AspNetCore.Controllers
             {
                 using (MiniProfiler.Current.Step("Get Existing"))
                 {
-                    hit = await context.RouteHits.FirstOrDefaultAsync(h => h.Id == id).ConfigureAwait(false);
+                    hit = await _context.RouteHits.FirstOrDefaultAsync(h => h.Id == id).ConfigureAwait(false);
                 }
 
                 if (hit != null)
