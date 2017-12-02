@@ -13,8 +13,9 @@ namespace ConsoleApp1
     internal static class Program
     {
         private static readonly HttpClient _httpClient = new HttpClient();
-        private static string _brokerBaseUrl = "http://localhost:54580";
+        private static string _brokerBaseUrl = "http://samplesaspnetcore20171128050304.azurewebsites.net/";
         private static int _itemCount = 10;
+        private static int _requestsPerWait = 15;
         private static readonly Stopwatch _stopwatch = new Stopwatch();
 
         public static async Task Main(string[] args)
@@ -29,6 +30,11 @@ namespace ConsoleApp1
                 _itemCount = int.Parse(args[1]);
             }
 
+            if (args.Length > 2 && !string.IsNullOrEmpty(args[2]))
+            {
+                _requestsPerWait = int.Parse(args[2]);
+            }
+
             _httpClient.BaseAddress = new Uri(_brokerBaseUrl);
             _httpClient.Timeout = TimeSpan.FromMinutes(10);
             ServicePointManager.DefaultConnectionLimit = 10000;
@@ -38,22 +44,24 @@ namespace ConsoleApp1
             Log("Begin test run with arguments: Url={0} , Count={1}", _brokerBaseUrl, _itemCount);
             _stopwatch.Start();
 
-            await DoPingAsync().ConfigureAwait(false);
-            Log($"Ping OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
+            //await DoPingAsync().ConfigureAwait(false);
+            //Log($"Ping OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
+            //lastTime = _stopwatch.ElapsedMilliseconds;
+
+            Log("================ Run with manual DI of context");
+            // Initial run - DbContext requested manually from DI
+            var items = await GetItemsAsync(_itemCount, getUrl).ConfigureAwait(false);
+            Log($"Fetch OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
+            lastTime = _stopwatch.ElapsedMilliseconds;
+            await UpdateItemsAsync(items, updateUrl).ConfigureAwait(false);
+            Log($"Update OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
+            lastTime = _stopwatch.ElapsedMilliseconds;
+            await GetResultAsync(profileUrl).ConfigureAwait(false);
+            Log($"Get Result OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
             lastTime = _stopwatch.ElapsedMilliseconds;
 
-            // Initial run - DbContext requested manually from DI
-            //var items = await GetItemsAsync(_itemCount, getUrl).ConfigureAwait(false);
-            //Log($"Fetch OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
-            //lastTime = _stopwatch.ElapsedMilliseconds;
-            //await UpdateItemsAsync(items, updateUrl).ConfigureAwait(false);
-            //Log($"Update OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
-            //lastTime = _stopwatch.ElapsedMilliseconds;
-            //await GetResultAsync(profileUrl).ConfigureAwait(false);
-            //Log($"Get Result OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
-            //lastTime = _stopwatch.ElapsedMilliseconds;
-
-            // Attempt 2 - DbContext directly from DI
+            //Log("================ Run with auto DI of context");
+            //// Attempt 2 - DbContext directly from DI
             //var items2 = await GetItemsAsync(_itemCount, getUrl2).ConfigureAwait(false);
             //Log($"Fetch OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
             //lastTime = _stopwatch.ElapsedMilliseconds;
@@ -64,15 +72,16 @@ namespace ConsoleApp1
             //Log($"Get Result OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
             //lastTime = _stopwatch.ElapsedMilliseconds;
 
-            var items3 = await GetItemsAsync(_itemCount, getUrl3).ConfigureAwait(false);
-            Log($"Fetch OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
-            lastTime = _stopwatch.ElapsedMilliseconds;
-            await UpdateItemsAsync(items3, updateUrl3).ConfigureAwait(false);
-            Log($"Update OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
-            lastTime = _stopwatch.ElapsedMilliseconds;
-            await GetResultAsync(profileUrl3).ConfigureAwait(false);
-            Log($"Get Result OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
-            lastTime = _stopwatch.ElapsedMilliseconds;
+            //Log("================ Run with ADO.NET");
+            //var items3 = await GetItemsAsync(_itemCount, getUrl3).ConfigureAwait(false);
+            //Log($"Fetch OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
+            //lastTime = _stopwatch.ElapsedMilliseconds;
+            //await UpdateItemsAsync(items3, updateUrl3).ConfigureAwait(false);
+            //Log($"Update OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
+            //lastTime = _stopwatch.ElapsedMilliseconds;
+            //await GetResultAsync(profileUrl3).ConfigureAwait(false);
+            //Log($"Get Result OK, took {_stopwatch.ElapsedMilliseconds - lastTime}ms");
+            //lastTime = _stopwatch.ElapsedMilliseconds;
 
             //Console.ReadKey();
         }
@@ -148,25 +157,38 @@ namespace ConsoleApp1
         // 3. Make N requests
         private static async Task UpdateItemsAsync(List<Guid> items, string url)
         {
-            var tasks = items.Select(async item =>
-            {
-                using (var request = new HttpRequestMessage(HttpMethod.Get, string.Format(url, item)))
-                {
-                    var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
-                    var output = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                    if (response.IsSuccessStatusCode)
-                    {
-                        if (!item.Equals(Guid.Parse(output.Replace("\"", ""))))
-                        {
-                            throw new InvalidOperationException($"Invalid response in request {item}");
-                        }
-                        return;
-                    }
-                    throw new InvalidOperationException($"Exception in task {item}: {output}");
-                }
-            });
+            Guid[] guids = items.ToArray();
+            Task[] taskArray = new Task[guids.Length];
 
-            await Task.WhenAll(tasks).ConfigureAwait(false);
+            for (int i = 0; i < guids.Length; i++)
+            {
+                Guid item = guids[i];
+                taskArray[i] = Task.Run(async () =>
+                {
+                    using (var request = new HttpRequestMessage(HttpMethod.Get, string.Format(url, item)))
+                    {
+                        var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
+                        var output = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                        if (response.IsSuccessStatusCode)
+                        {
+                            if (!item.Equals(Guid.Parse(output.Replace("\"", ""))))
+                            {
+                                throw new InvalidOperationException($"Invalid response in request {item}");
+                            }
+                            return;
+                        }
+                        throw new InvalidOperationException($"Exception in task {item}: {output}");
+                    }
+                });
+
+                if (i % _requestsPerWait == _requestsPerWait - 1)
+                {
+                    Log($"Made {i} requests");
+                    await Task.Delay(50).ConfigureAwait(false);
+                }
+            }
+
+            await Task.WhenAll(taskArray).ConfigureAwait(false);
         }
 
         // 4. Clean database
@@ -190,7 +212,7 @@ namespace ConsoleApp1
                 }
                 else
                 {
-                    Log($"Bad result: {output}");
+                    Log("Bad result: " + output);
                 }
             }
         }

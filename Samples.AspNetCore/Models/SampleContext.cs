@@ -16,11 +16,6 @@ namespace Samples.AspNetCore.Models
         {
             modelBuilder.Entity<RouteHit>()
                 .HasKey(t => t.Id);
-
-            //modelBuilder.Entity<RouteHit>()
-            //    .Property(ep => ep.RowVersion)
-            //    .IsConcurrencyToken()
-            //    .ValueGeneratedOnAddOrUpdate();
         }
     }
 
@@ -29,6 +24,5 @@ namespace Samples.AspNetCore.Models
         public Guid Id { get; set; }
         public string Name { get; set; }
         public DateTime? UpdateTime { get; set; }
-        // public byte[] RowVersion { get; set; }
     }
 }
